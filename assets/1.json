@@ -1,0 +1,19 @@
+{
+    "name": "Misia1",
+    "symbol": "",
+    "image": "1.png",
+    "properties": {
+      "files": [
+        {
+          "uri": "1.png",
+          "type": "image/png"
+        }
+      ],
+      "creators": [
+        {
+          "address": "DPXL3ir7NJb3Wcureyxom2vrLR19c5LuNs4i3uGcJt1H",
+          "share": 100
+        }
+      ]
+    }
+  }
