@@ -115,38 +115,109 @@ const CandyMachine = ({ walletAddress }) => {
 
   const mintToken = async () => {
     try {
-      // Add this here
       setIsMinting(true);
       const mint = web3.Keypair.generate();
       const token = await getTokenWallet(
         walletAddress.publicKey,
         mint.publicKey
       );
+      const metadata = await getMetadata(mint.publicKey);
+      const masterEdition = await getMasterEdition(mint.publicKey);
+      const rpcHost = process.env.REACT_APP_SOLANA_RPC_HOST;
+      const connection = new Connection(rpcHost);
+      const rent = await connection.getMinimumBalanceForRentExemption(
+        MintLayout.span
+      );
 
-      // if (notification.type === "status") {
-      //   console.log("Received status event");
+      const accounts = {
+        config,
+        candyMachine: process.env.REACT_APP_CANDY_MACHINE_ID,
+        payer: walletAddress.publicKey,
+        wallet: process.env.REACT_APP_TREASURY_ADDRESS,
+        mint: mint.publicKey,
+        metadata,
+        masterEdition,
+        mintAuthority: walletAddress.publicKey,
+        updateAuthority: walletAddress.publicKey,
+        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+        clock: web3.SYSVAR_CLOCK_PUBKEY,
+      };
 
-      //   const { result } = notification;
-      //   if (!result.err) {
-      //     console.log("NFT Minted!");
-      //     // Set our flag to false as our NFT has been minted!
-      //     setIsMinting(false);
-      //     await getCandyMachineState();
-      //   }
-      // }
+      const signers = [mint];
+      const instructions = [
+        web3.SystemProgram.createAccount({
+          fromPubkey: walletAddress.publicKey,
+          newAccountPubkey: mint.publicKey,
+          space: MintLayout.span,
+          lamports: rent,
+          programId: TOKEN_PROGRAM_ID,
+        }),
+        Token.createInitMintInstruction(
+          TOKEN_PROGRAM_ID,
+          mint.publicKey,
+          0,
+          walletAddress.publicKey,
+          walletAddress.publicKey
+        ),
+        createAssociatedTokenAccountInstruction(
+          token,
+          walletAddress.publicKey,
+          walletAddress.publicKey,
+          mint.publicKey
+        ),
+        Token.createMintToInstruction(
+          TOKEN_PROGRAM_ID,
+          mint.publicKey,
+          token,
+          walletAddress.publicKey,
+          [],
+          1
+        ),
+      ];
 
-      // rest of code
+      const provider = getProvider();
+      const idl = await Program.fetchIdl(candyMachineProgram, provider);
+      const program = new Program(idl, candyMachineProgram, provider);
+
+      const txn = await program.rpc.mintNft({
+        accounts,
+        signers,
+        instructions,
+      });
+
+      console.log('txn:', txn);
+
+      // Setup listener
+      connection.onSignatureWithOptions(
+        txn,
+        async (notification, context) => {
+          if (notification.type === 'status') {
+            console.log('Received status event');
+
+            const { result } = notification;
+            if (!result.err) {
+              console.log('NFT Minted!');
+
+              setIsMinting(false);
+              await getCandyMachineState();
+            }
+          }
+        },
+        { commitment: 'processed' }
+      );
     } catch (error) {
-      let message = error.msg || "Minting failed! Please try again!";
+      let message = error.msg || 'Minting failed! Please try again!';
 
-      // If we have an error set our loading flag to false
       setIsMinting(false);
 
       if (!error.msg) {
-        if (error.message.indexOf("0x138")) {
-        } else if (error.message.indexOf("0x137")) {
+        if (error.message.indexOf('0x138')) {
+        } else if (error.message.indexOf('0x137')) {
           message = `SOLD OUT!`;
-        } else if (error.message.indexOf("0x135")) {
+        } else if (error.message.indexOf('0x135')) {
           message = `Insufficient funds to mint. Please fund your wallet.`;
         }
       } else {
@@ -160,6 +231,7 @@ const CandyMachine = ({ walletAddress }) => {
       console.warn(message);
     }
   };
+
 
   const createAssociatedTokenAccountInstruction = (
     associatedTokenAddress,
